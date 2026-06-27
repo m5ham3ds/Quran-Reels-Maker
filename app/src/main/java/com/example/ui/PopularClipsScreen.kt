@@ -875,71 +875,9 @@ fun PopularClipsScreen(
                                                     
                                                     val isSocialUrl = clip.audioUrl.contains("youtube.com") || clip.audioUrl.contains("youtu.be") || clip.audioUrl.contains("tiktok.com") || clip.audioUrl.contains("instagram.com")
                                                     if (isSocialUrl) {
-                                                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                                            try {
-                                                                val jsonBody = "{\"url\":\"${clip.audioUrl}\",\"aFormat\":\"mp3\",\"isAudioOnly\":true}"
-                                                                var directUrl: String? = null
-                                                                
-                                                                val cobaltInstances = listOf(
-                                                                    "https://co.wuk.sh/api/json",
-                                                                    "https://cobalt.qewertyy.dev/",
-                                                                    "https://cobalt.mindsolo.net/",
-                                                                    "https://api.cobalt.tools/api/json",
-                                                                    "https://api.cobalt.tools/"
-                                                                )
-                                                                
-                                                                for (instanceUrl in cobaltInstances) {
-                                                                    try {
-                                                                        val hostURL = java.net.URL(instanceUrl)
-                                                                        val originUrl = "${hostURL.protocol}://${hostURL.host}"
-                                                                        
-                                                                        val connection = java.net.URL(instanceUrl).openConnection() as java.net.HttpURLConnection
-                                                                        connection.requestMethod = "POST"
-                                                                        connection.setRequestProperty("Accept", "application/json")
-                                                                        connection.setRequestProperty("Content-Type", "application/json")
-                                                                        connection.setRequestProperty("Origin", originUrl)
-                                                                        connection.setRequestProperty("Referer", "$originUrl/")
-                                                                        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                                                                        connection.doOutput = true
-                                                                        
-                                                                        connection.outputStream.use { os ->
-                                                                            val input = jsonBody.toByteArray(Charsets.UTF_8)
-                                                                            os.write(input, 0, input.size)
-                                                                        }
-                                                                        
-                                                                        val responseCode = connection.responseCode
-                                                                        if (responseCode == java.net.HttpURLConnection.HTTP_OK) {
-                                                                            val body = connection.inputStream.bufferedReader().use { it.readText() }
-                                                                            val json = org.json.JSONObject(body)
-                                                                            if (json.has("url")) {
-                                                                                directUrl = json.getString("url")
-                                                                                break
-                                                                            }
-                                                                        }
-                                                                    } catch (e: Exception) {
-                                                                        // Ignore and try next
-                                                                    }
-                                                                }
-                                                                
-                                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                                    if (directUrl != null && playingClipId == clip.id) {
-                                                                        previewPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(directUrl))
-                                                                        previewPlayer.prepare()
-                                                                        previewPlayer.playWhenReady = true
-                                                                    } else {
-                                                                        if (playingClipId == clip.id) isPreviewLoading = false
-                                                                        playingClipId = null
-                                                                        Toast.makeText(context, if (isArabic) "فشل استخراج العينة" else "Failed to extract sample", Toast.LENGTH_SHORT).show()
-                                                                    }
-                                                                }
-                                                            } catch (e: Exception) {
-                                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                                    if (playingClipId == clip.id) isPreviewLoading = false
-                                                                    playingClipId = null
-                                                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                                }
-                                                            }
-                                                        }
+                                                        Toast.makeText(context, if (isArabic) "المعاينة الصوتية غير متاحة للروابط الخارجية، يتم معالجتها أثناء المونتاج." else "Audio preview not available for external links, it will be processed during production.", Toast.LENGTH_LONG).show()
+                                                        playingClipId = null
+                                                        isPreviewLoading = false
                                                     } else {
                                                         previewPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(clip.audioUrl))
                                                         previewPlayer.prepare()
