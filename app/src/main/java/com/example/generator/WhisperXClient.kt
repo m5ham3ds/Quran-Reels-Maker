@@ -45,6 +45,23 @@ class ProgressRequestBody(
 }
 
 class WhisperXClient {
+    companion object {
+        private val cache = mutableMapOf<String, Pair<Long, ProcessResult>>()
+        
+        fun getCachedResult(url: String): ProcessResult? {
+            val cached = cache[url]
+            if (cached != null) {
+                // Check if it is less than 8 minutes old (480,000 ms)
+                if (System.currentTimeMillis() - cached.first < 480_000L) {
+                    return cached.second
+                } else {
+                    cache.remove(url)
+                }
+            }
+            return null
+        }
+    }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(600, TimeUnit.SECONDS)
@@ -68,6 +85,15 @@ class WhisperXClient {
         arabicText: String,
         onProgress: (String) -> Unit
     ): ProcessResult = withContext(Dispatchers.IO) {
+        if (urlInput.isNotBlank()) {
+            val cachedResult = getCachedResult(urlInput)
+            if (cachedResult != null) {
+                SystemDiagnosticTracker.addLog("WHISPERX", "تم العثور على معلومات مسبقة في الذاكرة لتوفير الوقت.")
+                onProgress("تم استرجاع معلومات المعالجة من الذاكرة المؤقتة...")
+                return@withContext cachedResult
+            }
+        }
+        
         var fileDataObj: JSONObject? = null
         if (file != null && file.exists()) {
             onProgress("جاري رفع الملف الصوتي للخادم...")
@@ -225,7 +251,11 @@ class WhisperXClient {
             }
         }
 
-        ProcessResult(chunksJson, outAudioUrl, errorLog, videoInfo)
+        val finalResult = ProcessResult(chunksJson, outAudioUrl, errorLog, videoInfo)
+        if (urlInput.isNotBlank()) {
+            cache[urlInput] = Pair(System.currentTimeMillis(), finalResult)
+        }
+        finalResult
     }
 }
 

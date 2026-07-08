@@ -914,6 +914,7 @@ fun PopularClipsScreen(
                                                                     }
                                                                 } else {
                                                                     if (cachedFile.exists()) cachedFile.delete()
+                                                                    com.example.generator.SystemDiagnosticTracker.clearLogs()
                                                                     com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "بدء جلب عينة المقطع من الرابط: ${clip.audioUrl}")
                                                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                                                         Toast.makeText(context, if (isArabic) "جاري جلب العينة من المنصة..." else "Fetching sample from platform...", Toast.LENGTH_SHORT).show()
@@ -924,8 +925,22 @@ fun PopularClipsScreen(
                                                                     }
                                                                     if (result.audioUrl.isNotBlank()) {
                                                                         com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "تم الحصول على رابط الصوت: ${result.audioUrl}. جاري التنزيل...")
+                                                                        
+                                                                        val fixedUrl = result.audioUrl
+                                                                            .replace(" ", "%20")
+                                                                            .replace("#", "%23")
+                                                                            .replace("|", "%7C")
+                                                                            .replace("^", "%5E")
+                                                                            .replace(">", "%3E")
+                                                                            .replace("<", "%3C")
+                                                                            .replace("\\", "%5C")
+                                                                            .replace("{", "%7B")
+                                                                            .replace("}", "%7D")
+                                                                            .replace("[", "%5B")
+                                                                            .replace("]", "%5D")
+                                                                            
                                                                         val request = okhttp3.Request.Builder()
-                                                                            .url(result.audioUrl)
+                                                                            .url(fixedUrl)
                                                                             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                                                                             .header("Accept", "*/*")
                                                                             .header("Referer", "https://qalam249-whisperx-frontend.hf.space/")
@@ -1825,6 +1840,7 @@ fun PopularClipsScreen(
                     Button(
                         onClick = {
                             isRefreshing = true
+                            com.example.generator.SystemDiagnosticTracker.clearLogs()
                             scope.launch {
                                 try {
                                     val generator = com.example.generator.GeminiMetaGenerator()
