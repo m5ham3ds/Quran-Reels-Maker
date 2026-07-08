@@ -1451,7 +1451,7 @@ class VideoGenerator {
             bgBitmap?.recycle()
             try { retriever?.release() } catch (ex: Exception) {}
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             if (com.example.service.VideoGenerationService.isCancelled) {
                 SystemDiagnosticTracker.addLog("PROCESS_CANCEL", "تم إلغاء عملية المونتاج من قبل المستخدم أثناء خطأ")
                 throw kotlinx.coroutines.CancellationException("تم إلغاء عملية إنتاج الفيديو")

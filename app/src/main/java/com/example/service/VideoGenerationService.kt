@@ -167,6 +167,9 @@ class VideoGenerationService : Service() {
                 }
             } catch (e: Throwable) {
                 val errMsg = e.localizedMessage ?: "Unknown error occurred"
+                SystemDiagnosticTracker.addLog("SERVICE_FATAL", "Exception caught in Service: $errMsg\n${android.util.Log.getStackTraceString(e)}")
+                SystemDiagnosticTracker.saveReportToFilesAndGetPath(this@VideoGenerationService, "Fatal Error: $errMsg")
+                
                 if (activeJob == currentJob) {
                     _serviceState.value = ReelState.Error(errMsg)
                     showErrorNotification(errMsg, isArabicFast)

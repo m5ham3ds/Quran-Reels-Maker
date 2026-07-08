@@ -48,6 +48,38 @@ object SystemDiagnosticTracker {
     }
 
     fun saveReportToFilesAndGetPath(context: Context, extraData: String = ""): String {
-        return ""
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val fileName = "diagnostic_report_$timeStamp.txt"
+        var finalPath = ""
+        
+        val content = StringBuilder()
+        content.appendLine("=== Quran Reels Diagnostic Report ===")
+        content.appendLine("Time: ${Date()}")
+        content.appendLine(extraData)
+        content.appendLine()
+        getLogs().forEach { content.appendLine(it) }
+        
+        try {
+            val docsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS)
+            if (docsDir != null) {
+                val reportsFolder = File(docsDir, "ERROR")
+                reportsFolder.mkdirs()
+                val file = File(reportsFolder, fileName)
+                file.writeText(content.toString())
+                finalPath = file.absolutePath
+            }
+        } catch (e: Exception) {}
+        
+        if (finalPath.isEmpty()) {
+            try {
+                val internalFolder = File(context.filesDir, "ERROR")
+                internalFolder.mkdirs()
+                val file = File(internalFolder, fileName)
+                file.writeText(content.toString())
+                finalPath = file.absolutePath
+            } catch (e: Exception) {}
+        }
+        
+        return finalPath
     }
 }

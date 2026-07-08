@@ -20,7 +20,10 @@ import kotlinx.coroutines.Job
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody
 import okhttp3.MultipartBody
 import org.json.JSONObject
 
@@ -519,14 +522,20 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val app = getApplication<Application>()
-                var fileBytes: ByteArray? = null
+                var tempWebhookFile: java.io.File? = null
                 try {
+                    val tempF = java.io.File(app.cacheDir, "webhook_upload_${System.currentTimeMillis()}.mp4")
                     app.contentResolver.openInputStream(videoUri)?.use { input ->
-                        fileBytes = input.readBytes()
+                        tempF.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
                     }
-                } catch (e: Exception) {
+                    if (tempF.exists()) {
+                        tempWebhookFile = tempF
+                    }
+                } catch (e: Throwable) {
                     e.printStackTrace()
-                    android.util.Log.e("Webhook", "Could not read video file bytes: ${e.message}")
+                    android.util.Log.e("Webhook", "Could not copy video file: ${e.message}")
                 }
 
                 val json = JSONObject().apply {
@@ -580,7 +589,7 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
                     put("apiTokens", tokensJson)
                 }
 
-                val requestBody = if (fileBytes != null) {
+                val requestBody = if (tempWebhookFile != null) {
                     MultipartBody.Builder()
                         .setType(MultipartBody.FORM)
                         .addFormDataPart("event", "video_generated")
@@ -592,7 +601,7 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
                         .addFormDataPart(
                             "video",
                             "quran_reel_${System.currentTimeMillis()}.mp4",
-                            fileBytes!!.toRequestBody("video/mp4".toMediaType())
+                            tempWebhookFile.asRequestBody("video/mp4".toMediaType())
                         )
                         .build()
                 } else {
@@ -604,10 +613,18 @@ class ReelViewModel(application: Application) : AndroidViewModel(application) {
                     .post(requestBody)
                     .build()
 
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .writeTimeout(5, java.util.concurrent.TimeUnit.MINUTES)
+                    .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+                    .build()
+
                 client.newCall(request).execute().use { response ->
                     android.util.Log.d("Webhook", "Webhook execution completed with code: ${response.code}")
                 }
-            } catch (e: Exception) {
+                
+                try { tempWebhookFile?.delete() } catch (e: Exception) {}
+            } catch (e: Throwable) {
                 e.printStackTrace()
                 android.util.Log.e("Webhook", "Webhook execution failed: ${e.message}")
             }
