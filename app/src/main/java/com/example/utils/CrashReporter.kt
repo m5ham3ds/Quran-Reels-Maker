@@ -124,10 +124,10 @@ class CrashReporter(
         }
         
         writer.println()
-        writer.println("--- System Diagnostic Logs ---")
-        val logs = com.example.generator.SystemDiagnosticTracker.getLogs()
+        writer.println("--- System Diagnostic Errors ---")
+        val logs = com.example.generator.SystemDiagnosticTracker.getLogs().filter { it.contains("ERROR", true) || it.contains("FATAL", true) || it.contains("Exception", true) }
         if (logs.isEmpty()) {
-            writer.println("No diagnostic logs found.")
+            writer.println("No diagnostic errors found.")
         } else {
             for (log in logs) {
                 writer.println(log)
@@ -150,12 +150,16 @@ class CrashReporter(
     
     private fun getLogcatOutput(): String {
         return try {
-            val process = Runtime.getRuntime().exec("logcat -d -v time -t 1000")
+            val pid = android.os.Process.myPid()
+            val process = Runtime.getRuntime().exec("logcat -d -v threadtime -t 2000")
             val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
             val log = java.lang.StringBuilder()
             var line: String?
+            val pidStr = pid.toString()
             while (reader.readLine().also { line = it } != null) {
-                log.append(line).append("\n")
+                if (line!!.contains(pidStr)) {
+                    log.append(line).append("\n")
+                }
             }
             log.toString()
         } catch (e: Exception) {
