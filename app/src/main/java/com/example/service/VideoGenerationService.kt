@@ -36,6 +36,7 @@ class VideoGenerationService : Service() {
     override fun onCreate() {
         super.onCreate()
         com.example.utils.CrashReporter.initialize(this)
+        com.example.generator.SystemDiagnosticTracker.init(this)
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager

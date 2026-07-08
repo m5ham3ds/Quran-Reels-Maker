@@ -19,11 +19,31 @@ data class DiagnosticLog(
 object SystemDiagnosticTracker {
     private val _logs = MutableStateFlow<List<DiagnosticLog>>(emptyList())
     val logs: StateFlow<List<DiagnosticLog>> = _logs.asStateFlow()
+    
+    private var logFile: File? = null
+    
+    fun init(context: Context) {
+        try {
+            val dir = File(context.getExternalFilesDir(null), "DiagnosticLogs")
+            if (!dir.exists()) dir.mkdirs()
+            logFile = File(dir, "live_log_${System.currentTimeMillis()}.txt")
+            logFile?.writeText("=== Live Diagnostic Log Started ===\n")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     fun addLog(tag: String, message: String, severity: String = "INFO") {
         val currentLogs = _logs.value.toMutableList()
-        currentLogs.add(DiagnosticLog(System.currentTimeMillis(), severity, tag, message))
+        val log = DiagnosticLog(System.currentTimeMillis(), severity, tag, message)
+        currentLogs.add(log)
         _logs.value = currentLogs
+        
+        try {
+            val sdf = SimpleDateFormat("HH:mm:ss", Locale.ENGLISH)
+            val line = "[${sdf.format(Date(log.timestamp))}] [${log.severity}] [${log.tag}] ${log.message}\n"
+            logFile?.appendText(line)
+        } catch (e: Exception) {}
     }
 
     fun getLogs(): List<String> {

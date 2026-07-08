@@ -17,6 +17,7 @@ class CrashReporter(
 
     override fun uncaughtException(thread: Thread, exception: Throwable) {
         try {
+            com.example.generator.SystemDiagnosticTracker.addLog("FATAL_CRASH", "Uncaught Exception in ${thread.name}: ${exception.javaClass.name} - ${exception.message}\n${Log.getStackTraceString(exception)}")
             saveCrashLog(thread, exception)
         } catch (e: Exception) {
             Log.e("CrashReporter", "Error saving crash log", e)
