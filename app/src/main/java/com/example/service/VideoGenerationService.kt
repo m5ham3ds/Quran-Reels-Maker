@@ -35,6 +35,7 @@ class VideoGenerationService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        com.example.utils.CrashReporter.initialize(this)
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel()
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -77,17 +78,17 @@ class VideoGenerationService : Service() {
         val isPreviewMode = intent.getBooleanExtra("isPreviewMode", false)
         val videoQuery = intent.getStringExtra("videoQuery")
 
+        // 1. Show immediate Foreground Service Notification synchronously
+        val isArabicFast = kotlinx.coroutines.runBlocking {
+            com.example.settings.SettingsManager(this@VideoGenerationService).language.first() == "ar"
+        }
+        startForegroundServiceState(startAyah, endAyah, isArabicFast)
+
         scope.launch {
             activeJob = coroutineContext[kotlinx.coroutines.Job]
-            val settingsManager = com.example.settings.SettingsManager(this@VideoGenerationService)
-            val language = settingsManager.language.first()
-            val isArabic = language == "ar"
-
-            // 1. Show immediate Foreground Service Notification
-            startForegroundServiceState(startAyah, endAyah, isArabic)
-
             val currentJob = activeJob
             try {
+                val settingsManager = com.example.settings.SettingsManager(this@VideoGenerationService)
                 val includeBasmalah = settingsManager.includeBasmalah.first()
                 val videoGenerator = VideoGenerator()
                 activeGenerator = videoGenerator
@@ -110,14 +111,14 @@ class VideoGenerationService : Service() {
                 
                 val msgLoading = if (isPreviewMode) {
                     if (chunkIndexToReplace != -1) {
-                        if (isArabic) "جاري استبدال الخلفية..." else "Replacing background..."
+                        if (isArabicFast) "جاري استبدال الخلفية..." else "Replacing background..."
                     } else if (isRetry) {
-                        if (isArabic) "جاري تحديث المعاينة..." else "Updating preview..."
+                        if (isArabicFast) "جاري تحديث المعاينة..." else "Updating preview..."
                     } else {
-                        if (isArabic) "جاري جلب خلفيات جديدة..." else "Fetching new backgrounds..."
+                        if (isArabicFast) "جاري جلب خلفيات جديدة..." else "Fetching new backgrounds..."
                     }
                 } else {
-                    if (isArabic) "جاري تصدير الفيديو النهائي..." else "Exporting final video..."
+                    if (isArabicFast) "جاري تصدير الفيديو النهائي..." else "Exporting final video..."
                 }
 
                 _serviceState.value = ReelState.Loading(msgLoading, 0f)
@@ -138,12 +139,12 @@ class VideoGenerationService : Service() {
                     chunkIndexToReplace = chunkIndexToReplace,
                     onProgress = { msg, progress ->
                         _serviceState.value = ReelState.Loading(msg, progress)
-                        updateNotificationProgress(msg, progress, isArabic)
+                        updateNotificationProgress(msg, progress, isArabicFast)
                     },
                     onComplete = { uri ->
                         if (activeJob == currentJob) {
                             _serviceState.value = ReelState.Success(uri)
-                            showCompleteNotification(uri, isArabic)
+                            showCompleteNotification(uri, isArabicFast)
                             stopForeground(true)
                             stopSelf()
                         }
@@ -151,7 +152,7 @@ class VideoGenerationService : Service() {
                     onError = { err ->
                         if (activeJob == currentJob) {
                             _serviceState.value = ReelState.Error(err)
-                            showErrorNotification(err, isArabic)
+                            showErrorNotification(err, isArabicFast)
                             stopForeground(true)
                             stopSelf()
                         }
@@ -164,11 +165,11 @@ class VideoGenerationService : Service() {
                     stopForeground(true)
                     stopSelf()
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 val errMsg = e.localizedMessage ?: "Unknown error occurred"
                 if (activeJob == currentJob) {
                     _serviceState.value = ReelState.Error(errMsg)
-                    showErrorNotification(errMsg, isArabic)
+                    showErrorNotification(errMsg, isArabicFast)
                     stopForeground(true)
                     stopSelf()
                 }
@@ -230,7 +231,7 @@ class VideoGenerationService : Service() {
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, if (isArabic) "إلغاء المونتاج" else "Cancel", cancelPendingIntent)
             .build()
 
-        if (Build.VERSION.SDK_INT >= 34) {
+        if (Build.VERSION.SDK_INT >= 35) {
             startForeground(notificationId, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROCESSING)
         } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(notificationId, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)

@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.utils.CrashReporter.initialize(this)
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current
