@@ -128,12 +128,13 @@ fun PopularClipsScreen(
                 }
             }
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                com.example.generator.SystemDiagnosticTracker.addLog("PLAYER_ERROR", "ExoPlayer error: ${error.errorCode} - ${error.message}")
                 android.util.Log.e("PopularClipsScreen", "ExoPlayer error: ${error.message}", error)
                 isPreviewLoading = false
                 playingClipId = null
                 Toast.makeText(
                     context, 
-                    if (isArabic) "تعذر تشغيل العينة: تأكد من اتصالك بالإنترنت" else "Could not play audio: check your connection", 
+                    if (isArabic) "تعذر تشغيل العينة: ${error.message}" else "Could not play audio: ${error.message}", 
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -903,17 +904,20 @@ fun PopularClipsScreen(
                                                         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                                             try {
                                                                 val safeId = clip.id.replace(Regex("[^a-zA-Z0-9.-]"), "_")
-                                                                val cachedFile = java.io.File(context.cacheDir, "sample_$safeId.mp3")
+                                                                val cachedFiles = context.cacheDir.listFiles { _, name -> name.startsWith("sample_$safeId.") }
+                                                                val cachedFile = cachedFiles?.firstOrNull()
                                                                 val oneHourAgo = System.currentTimeMillis() - (60 * 60 * 1000)
                                                                 
-                                                                if (cachedFile.exists() && cachedFile.lastModified() > oneHourAgo) {
+                                                                if (cachedFile != null && cachedFile.exists() && cachedFile.lastModified() > oneHourAgo && cachedFile.length() > 1024) {
                                                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                                        previewPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(cachedFile)))
+                                                                        val uri = android.net.Uri.fromFile(cachedFile)
+                                                                        com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "تشغيل من الذاكرة المؤقتة: ${cachedFile.absolutePath}")
+                                                                        previewPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
                                                                         previewPlayer.prepare()
                                                                         previewPlayer.playWhenReady = true
                                                                     }
                                                                 } else {
-                                                                    if (cachedFile.exists()) cachedFile.delete()
+                                                                    cachedFiles?.forEach { it.delete() }
                                                                     com.example.generator.SystemDiagnosticTracker.clearLogs()
                                                                     com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "بدء جلب عينة المقطع من الرابط: ${clip.audioUrl}")
                                                                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -949,8 +953,13 @@ fun PopularClipsScreen(
                                                                         val response = client.newCall(request).execute()
                                                                         if (response.isSuccessful && response.body != null) {
                                                                             val totalBytes = response.body!!.contentLength()
+                                                                            if (totalBytes < 1000 && totalBytes > 0) {
+                                                                                com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "تحذير: الملف صغير جداً ($totalBytes بايت)، قد يكون صفحة خطأ.")
+                                                                            }
+                                                                            val extension = result.audioUrl.substringAfterLast('.', "mp3").take(4).replace(Regex("[^a-zA-Z0-9]"), "")
+                                                                            val finalCachedFile = java.io.File(context.cacheDir, "sample_$safeId.$extension")
                                                                             val inputStream = response.body!!.byteStream()
-                                                                            val outputStream = java.io.FileOutputStream(cachedFile)
+                                                                            val outputStream = java.io.FileOutputStream(finalCachedFile)
                                                                             
                                                                             val buffer = ByteArray(8 * 1024)
                                                                             var bytesRead: Int
@@ -973,7 +982,9 @@ fun PopularClipsScreen(
                                                                             
                                                                             com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "تم تنزيل العينة بنجاح. يتم حفظها لمدة ساعة ثم ستُحذف تلقائياً.")
                                                                             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                                                                previewPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(android.net.Uri.fromFile(cachedFile)))
+                                                                                val uri = android.net.Uri.fromFile(finalCachedFile)
+                                                                                com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "بدء التشغيل عبر ExoPlayer للملف: ${finalCachedFile.absolutePath}")
+                                                                                previewPlayer.setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
                                                                                 previewPlayer.prepare()
                                                                                 previewPlayer.playWhenReady = true
                                                                             }
