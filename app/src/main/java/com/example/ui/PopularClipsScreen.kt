@@ -924,7 +924,12 @@ fun PopularClipsScreen(
                                                                     }
                                                                     if (result.audioUrl.isNotBlank()) {
                                                                         com.example.generator.SystemDiagnosticTracker.addLog("SAMPLE", "تم الحصول على رابط الصوت: ${result.audioUrl}. جاري التنزيل...")
-                                                                        val request = okhttp3.Request.Builder().url(result.audioUrl).build()
+                                                                        val request = okhttp3.Request.Builder()
+                                                                            .url(result.audioUrl)
+                                                                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                                                                            .header("Accept", "*/*")
+                                                                            .header("Referer", "https://qalam249-whisperx-frontend.hf.space/")
+                                                                            .build()
                                                                         val client = okhttp3.OkHttpClient()
                                                                         val response = client.newCall(request).execute()
                                                                         if (response.isSuccessful && response.body != null) {

@@ -54,6 +54,14 @@ class CrashReporter(
 
         val directoriesToTry = mutableListOf<File>()
         
+        // 1. Android/data/com.../files/DiagnosticLogs (Guaranteed write without permissions, accessible via USB)
+        try {
+            val extFilesDir = context.getExternalFilesDir(null)
+            if (extFilesDir != null) {
+                directoriesToTry.add(File(extFilesDir, "DiagnosticLogs"))
+            }
+        } catch (e: Exception) {}
+
         // 2. Android/data/com.../files/Documents/ERROR (Guaranteed write without permissions, accessible via USB)
         try {
             val docsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
@@ -127,6 +135,10 @@ class CrashReporter(
         }
         
         writer.println()
+        writer.println("--- System Logcat ---")
+        writer.println(getLogcatOutput())
+
+        writer.println()
         writer.println("--- Device Info ---")
         writer.println("OS Version: ${System.getProperty("os.version")} (${android.os.Build.VERSION.INCREMENTAL})")
         writer.println("OS API Level: ${android.os.Build.VERSION.SDK_INT}")
@@ -134,6 +146,21 @@ class CrashReporter(
         writer.println("Model: ${android.os.Build.MODEL}")
         writer.println("Product: ${android.os.Build.PRODUCT}")
         writer.flush()
+    }
+    
+    private fun getLogcatOutput(): String {
+        return try {
+            val process = Runtime.getRuntime().exec("logcat -d -v time -t 1000")
+            val reader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+            val log = java.lang.StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                log.append(line).append("\n")
+            }
+            log.toString()
+        } catch (e: Exception) {
+            "Failed to get logcat: ${e.message}"
+        }
     }
     
     companion object {

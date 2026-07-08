@@ -49,6 +49,15 @@ class WhisperXClient {
         .connectTimeout(60, TimeUnit.SECONDS)
         .readTimeout(600, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val requestBuilder = original.newBuilder()
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .header("Accept", "*/*")
+                .header("Referer", "https://qalam249-whisperx-frontend.hf.space/")
+                .method(original.method, original.body)
+            chain.proceed(requestBuilder.build())
+        }
         .build()
 
     private val baseUrl = "https://qalam249-whisperx-frontend.hf.space"

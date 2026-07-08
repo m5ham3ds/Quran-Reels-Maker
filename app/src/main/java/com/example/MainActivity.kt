@@ -1348,6 +1348,8 @@ fun FontFormattingScreen(settingsManager: SettingsManager, isArabic: Boolean) {
     val textPosition by settingsManager.textPosition.collectAsState(initial = "Center")
     val textAlign by settingsManager.textAlign.collectAsState(initial = "Center")
     val textAnimation by settingsManager.textAnimation.collectAsState(initial = "Fade")
+    val bgTransitionEnabled by settingsManager.bgTransitionEnabled.collectAsState(initial = false)
+    val bgTransitionType by settingsManager.bgTransitionType.collectAsState(initial = "dissolve")
     
     val showTranslation by settingsManager.showTranslation.collectAsState(initial = true)
     val translationFontSize by settingsManager.translationFontSize.collectAsState(initial = 8)
@@ -1991,6 +1993,61 @@ fun FontFormattingScreen(settingsManager: SettingsManager, isArabic: Boolean) {
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
+                                }
+                            }
+                        }
+                    }
+
+                    // Background Transition
+                    HorizontalDivider(color = BorderColor)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = LuxuryGold, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (isArabic) "انتقالات الخلفيات" else "Background Transition", color = TextSoftColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                        Switch(
+                            checked = bgTransitionEnabled,
+                            onCheckedChange = { scope.launch { settingsManager.setBgTransitionEnabled(it) } },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = ScreenBg,
+                                checkedTrackColor = LuxuryGold,
+                                uncheckedThumbColor = TextMutedColor,
+                                uncheckedTrackColor = BorderColor
+                            )
+                        )
+                    }
+
+                    if (bgTransitionEnabled) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val bgTransitions = listOf("black" to (if (isArabic) "أسود" else "Black"), "dissolve" to (if (isArabic) "تلاشي" else "Dissolve"), "blink" to (if (isArabic) "رمشة" else "Blink"), "vertical" to (if (isArabic) "عمودي" else "Vertical"))
+                            bgTransitions.forEach { (trans, label) ->
+                                val isSelected = bgTransitionType == trans
+                                Card(
+                                    onClick = { scope.launch { settingsManager.setBgTransitionType(trans) } },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) LuxuryGold else ScreenBg
+                                    ),
+                                    border = if (!isSelected) BorderStroke(1.dp, BorderColor) else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(50.dp)
+                                ) {
+                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = label,
+                                            color = if (isSelected) ScreenBg else TextSoftColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -280,6 +280,8 @@ class VideoGenerator {
             val iconY = iconYOverride?.toInt() ?: settingsManager.iconY.first()
             val pixabayApiKey = settingsManager.pixabayApiKey.first()
             val backgroundKeywords = settingsManager.backgroundKeywords.first()
+            val bgTransitionEnabled = settingsManager.bgTransitionEnabled.first()
+            val bgTransitionType = settingsManager.bgTransitionType.first()
             
             // Download and prepare custom fonts if needed
             try {
@@ -1188,6 +1190,9 @@ class VideoGenerator {
             val fps = 15
             val frameDurationUs = 1000000L / fps
             
+            var previousVideoLastFrame: Bitmap? = null
+            var currentBgFrameForTransition: Bitmap? = null
+
             for ((idx, verse) in verses.withIndex()) {
                 reportProgress(if (isArabic) "جاري تصوير مشهدي الآية ${startAyah + idx}..." else "Rendering scenes for Ayah ${startAyah + idx}...", 0.5f + (idx * 0.4f / verses.size))
                 
@@ -1220,6 +1225,10 @@ class VideoGenerator {
                     val videoIdx = globalChunkOffset + chunkIdx
                     
                     if (videoIdx != lastVideoIdx) {
+                        if (lastVideoIdx != -1 && currentBgFrameForTransition != null) {
+                            previousVideoLastFrame?.recycle()
+                            previousVideoLastFrame = currentBgFrameForTransition?.copy(Bitmap.Config.ARGB_8888, false)
+                        }
                         lastVideoIdx = videoIdx
                         if (videoLoaded && downloadedVideoFiles.isNotEmpty()) {
                             try {
@@ -1238,6 +1247,7 @@ class VideoGenerator {
                     if (frameDecoder != null) {
                         try {
                             bgFrameBitmap = frameDecoder?.getNextFrame()
+                            currentBgFrameForTransition = bgFrameBitmap
                         } catch (e: Exception) {
                             e.printStackTrace()
                         }
@@ -1294,7 +1304,10 @@ class VideoGenerator {
                         chunkTimeMs = chunkTimeMs,
                         isPreviewMode = isPreviewMode,
                         videoWidth = vidWidth,
-                        videoHeight = vidHeight
+                        videoHeight = vidHeight,
+                        bgTransitionEnabled = bgTransitionEnabled,
+                        bgTransitionType = bgTransitionType,
+                        previousBgBitmap = previousVideoLastFrame
                     )
                     
                     var inIdx = -1
@@ -1326,6 +1339,8 @@ class VideoGenerator {
             val totalReelDurationUs = verseStartTimestampsUs.last() + Math.round(verses.last().durationUs.toDouble() / frameDurationUs.toDouble()).toInt().coerceAtLeast(1) * frameDurationUs
             encoder.queueInputBuffer(eosIdx, 0, 0, totalReelDurationUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
             
+            previousVideoLastFrame?.recycle()
+
             val drainCompleted = drainLatch.await(5, TimeUnit.MINUTES)
             if (!drainCompleted) {
                 throw Exception("توقيت معالجة الفيديو انتهى دون استجابة الترميز")
@@ -2166,7 +2181,10 @@ class VideoGenerator {
         chunkTimeMs: Long,
         isPreviewMode: Boolean,
         videoWidth: Int = 720,
-        videoHeight: Int = 1280
+        videoHeight: Int = 1280,
+        bgTransitionEnabled: Boolean = false,
+        bgTransitionType: String = "dissolve",
+        previousBgBitmap: Bitmap? = null
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(videoWidth, videoHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -2175,7 +2193,47 @@ class VideoGenerator {
         if (bgBitmap != null) {
             val src = android.graphics.Rect(0, 0, bgBitmap.width, bgBitmap.height)
             val dst = android.graphics.Rect(0, 0, videoWidth, videoHeight)
-            canvas.drawBitmap(bgBitmap, src, dst, null)
+            
+            if (bgTransitionEnabled && previousBgBitmap != null && chunkTimeMs < 500L) {
+                val progress = chunkTimeMs.toFloat() / 500f
+                val prevSrc = android.graphics.Rect(0, 0, previousBgBitmap.width, previousBgBitmap.height)
+                
+                when (bgTransitionType.lowercase()) {
+                    "dissolve" -> {
+                        canvas.drawBitmap(previousBgBitmap, prevSrc, dst, null)
+                        val alphaPaint = Paint().apply { alpha = (progress * 255).toInt().coerceIn(0, 255) }
+                        canvas.drawBitmap(bgBitmap, src, dst, alphaPaint)
+                    }
+                    "black" -> {
+                        if (progress < 0.5f) {
+                            val alphaPaint = Paint().apply { alpha = ((1f - progress * 2f) * 255).toInt().coerceIn(0, 255) }
+                            canvas.drawColor(Color.BLACK) // Black background
+                            canvas.drawBitmap(previousBgBitmap, prevSrc, dst, alphaPaint)
+                        } else {
+                            val alphaPaint = Paint().apply { alpha = ((progress * 2f - 1f) * 255).toInt().coerceIn(0, 255) }
+                            canvas.drawColor(Color.BLACK)
+                            canvas.drawBitmap(bgBitmap, src, dst, alphaPaint)
+                        }
+                    }
+                    "blink" -> {
+                        if (progress < 0.15f) {
+                            canvas.drawColor(Color.WHITE)
+                        } else {
+                            canvas.drawBitmap(bgBitmap, src, dst, null)
+                        }
+                    }
+                    "vertical" -> {
+                        canvas.drawBitmap(previousBgBitmap, prevSrc, dst, null)
+                        val slideY = (videoHeight * (1f - progress)).toInt()
+                        val slideDst = android.graphics.Rect(0, slideY, videoWidth, videoHeight)
+                        val slideSrc = android.graphics.Rect(0, 0, bgBitmap.width, (bgBitmap.height * progress).toInt().coerceAtLeast(1))
+                        canvas.drawBitmap(bgBitmap, slideSrc, slideDst, null)
+                    }
+                    else -> canvas.drawBitmap(bgBitmap, src, dst, null)
+                }
+            } else {
+                canvas.drawBitmap(bgBitmap, src, dst, null)
+            }
             
             // Apply dual layers of premium dark mysterious gradient filters!
             // Layer A: Vertical dark-gold/violet linear shadow gradient
