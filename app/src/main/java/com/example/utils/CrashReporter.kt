@@ -29,9 +29,31 @@ class CrashReporter(
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = "crash_$timeStamp.txt"
         
+        // 1. Try MediaStore (best for Android 10+ user visibility)
+        try {
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Movies/Quran Reels/ERROR")
+                }
+            }
+            val uri = context.contentResolver.insert(android.provider.MediaStore.Files.getContentUri("external"), values)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    PrintWriter(out).use { writer ->
+                        writeCrashLogToWriter(writer, thread, exception)
+                    }
+                }
+                Log.d("CrashReporter", "Successfully wrote crash log to MediaStore: $uri")
+            }
+        } catch (e: Exception) {
+            Log.e("CrashReporter", "Failed to write crash log to MediaStore", e)
+        }
+
         val directoriesToTry = mutableListOf<File>()
         
-        // 1. Android/data/com.../files/Documents/ERROR (Guaranteed write without permissions, accessible via USB)
+        // 2. Android/data/com.../files/Documents/ERROR (Guaranteed write without permissions, accessible via USB)
         try {
             val docsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS)
             if (docsDir != null) {
@@ -39,7 +61,7 @@ class CrashReporter(
             }
         } catch (e: Exception) {}
 
-        // 2. Android/data/com.../files/ERROR (Guaranteed write, accessible via USB)
+        // 3. Android/data/com.../files/ERROR (Guaranteed write, accessible via USB)
         try {
             val extFilesDir = context.getExternalFilesDir(null)
             if (extFilesDir != null) {
@@ -47,25 +69,25 @@ class CrashReporter(
             }
         } catch (e: Exception) {}
         
-        // 3. Movies/Quran Reels/ERROR (Best for user visibility, but may fail due to scoped storage)
+        // 4. Movies/Quran Reels/ERROR (May fail due to scoped storage, but good if it works)
         try {
             val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
             val appFolder = File(moviesDir, "Quran Reels")
             directoriesToTry.add(File(appFolder, "ERROR"))
         } catch (e: Exception) {}
         
-        // 4. Internal app data (Last resort, user might not find it)
+        // 5. Internal app data (Last resort, user might not find it)
         directoriesToTry.add(File(context.filesDir, "ERROR"))
 
-        var writtenSuccessfully = false
         for (dir in directoriesToTry) {
             try {
                 if (!dir.exists()) {
                     dir.mkdirs()
                 }
                 val crashFile = File(dir, fileName)
-                writeCrashLog(crashFile, thread, exception)
-                writtenSuccessfully = true
+                PrintWriter(FileWriter(crashFile)).use { writer ->
+                    writeCrashLogToWriter(writer, thread, exception)
+                }
                 Log.d("CrashReporter", "Successfully wrote crash log to ${crashFile.absolutePath}")
             } catch (e: Exception) {
                 Log.e("CrashReporter", "Failed to write crash log to ${dir.absolutePath}", e)
@@ -73,45 +95,44 @@ class CrashReporter(
         }
     }
     
-    private fun writeCrashLog(file: File, thread: Thread, exception: Throwable) {
-        PrintWriter(FileWriter(file)).use { writer ->
-            writer.println("=== Quran Reels Crash Report ===")
-            writer.println("Time: ${Date()}")
-            writer.println("Thread: ${thread.name} (ID: ${thread.id})")
-            writer.println("Exception: ${exception.javaClass.name}")
-            writer.println("Message: ${exception.message}")
-            writer.println()
-            writer.println("--- Stack Trace ---")
-            exception.printStackTrace(writer)
-            writer.println()
-            
-            var cause = exception.cause
-            while (cause != null) {
-                writer.println("--- Cause: ${cause.javaClass.name} ---")
-                writer.println("Message: ${cause.message}")
-                cause.printStackTrace(writer)
-                cause = cause.cause
-            }
-            
-            writer.println()
-            writer.println("--- System Diagnostic Logs ---")
-            val logs = com.example.generator.SystemDiagnosticTracker.getLogs()
-            if (logs.isEmpty()) {
-                writer.println("No diagnostic logs found.")
-            } else {
-                for (log in logs) {
-                    writer.println(log)
-                }
-            }
-            
-            writer.println()
-            writer.println("--- Device Info ---")
-            writer.println("OS Version: ${System.getProperty("os.version")} (${android.os.Build.VERSION.INCREMENTAL})")
-            writer.println("OS API Level: ${android.os.Build.VERSION.SDK_INT}")
-            writer.println("Device: ${android.os.Build.DEVICE}")
-            writer.println("Model: ${android.os.Build.MODEL}")
-            writer.println("Product: ${android.os.Build.PRODUCT}")
+    private fun writeCrashLogToWriter(writer: PrintWriter, thread: Thread, exception: Throwable) {
+        writer.println("=== Quran Reels Crash Report ===")
+        writer.println("Time: ${Date()}")
+        writer.println("Thread: ${thread.name} (ID: ${thread.id})")
+        writer.println("Exception: ${exception.javaClass.name}")
+        writer.println("Message: ${exception.message}")
+        writer.println()
+        writer.println("--- Stack Trace ---")
+        exception.printStackTrace(writer)
+        writer.println()
+        
+        var cause = exception.cause
+        while (cause != null) {
+            writer.println("--- Cause: ${cause.javaClass.name} ---")
+            writer.println("Message: ${cause.message}")
+            cause.printStackTrace(writer)
+            cause = cause.cause
         }
+        
+        writer.println()
+        writer.println("--- System Diagnostic Logs ---")
+        val logs = com.example.generator.SystemDiagnosticTracker.getLogs()
+        if (logs.isEmpty()) {
+            writer.println("No diagnostic logs found.")
+        } else {
+            for (log in logs) {
+                writer.println(log)
+            }
+        }
+        
+        writer.println()
+        writer.println("--- Device Info ---")
+        writer.println("OS Version: ${System.getProperty("os.version")} (${android.os.Build.VERSION.INCREMENTAL})")
+        writer.println("OS API Level: ${android.os.Build.VERSION.SDK_INT}")
+        writer.println("Device: ${android.os.Build.DEVICE}")
+        writer.println("Model: ${android.os.Build.MODEL}")
+        writer.println("Product: ${android.os.Build.PRODUCT}")
+        writer.flush()
     }
     
     companion object {

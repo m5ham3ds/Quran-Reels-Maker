@@ -52,34 +52,75 @@ object SystemDiagnosticTracker {
         val fileName = "diagnostic_report_$timeStamp.txt"
         var finalPath = ""
         
-        val content = StringBuilder()
-        content.appendLine("=== Quran Reels Diagnostic Report ===")
-        content.appendLine("Time: ${Date()}")
-        content.appendLine(extraData)
-        content.appendLine()
-        getLogs().forEach { content.appendLine(it) }
-        
+        // 1. Try MediaStore fallback (best for user visibility on Android 10+)
         try {
-            val docsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS)
-            if (docsDir != null) {
-                val reportsFolder = File(docsDir, "ERROR")
-                reportsFolder.mkdirs()
-                val file = File(reportsFolder, fileName)
-                file.writeText(content.toString())
-                finalPath = file.absolutePath
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Movies/Quran Reels/ERROR")
+                }
+            }
+            val uri = context.contentResolver.insert(android.provider.MediaStore.Files.getContentUri("external"), values)
+            if (uri != null) {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    java.io.OutputStreamWriter(out).use { writer ->
+                        writer.write("=== Quran Reels Diagnostic Report ===\n")
+                        writer.write("Time: ${Date()}\n")
+                        writer.write(extraData)
+                        writer.write("\n\n")
+                        for (log in getLogs()) {
+                            writer.write(log)
+                            writer.write("\n")
+                        }
+                    }
+                }
+                finalPath = uri.toString()
             }
         } catch (e: Exception) {}
-        
-        if (finalPath.isEmpty()) {
+
+        val directoriesToTry = mutableListOf<File>()
+
+        try {
+            val docsDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_DOCUMENTS)
+            if (docsDir != null) directoriesToTry.add(File(docsDir, "ERROR"))
+        } catch (e: Exception) {}
+
+        try {
+            val extFilesDir = context.getExternalFilesDir(null)
+            if (extFilesDir != null) directoriesToTry.add(File(extFilesDir, "ERROR"))
+        } catch (e: Exception) {}
+
+        try {
+            val moviesDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_MOVIES)
+            directoriesToTry.add(File(moviesDir, "Quran Reels/ERROR"))
+        } catch (e: Exception) {}
+
+        directoriesToTry.add(File(context.filesDir, "ERROR"))
+
+        for (dir in directoriesToTry) {
             try {
-                val internalFolder = File(context.filesDir, "ERROR")
-                internalFolder.mkdirs()
-                val file = File(internalFolder, fileName)
-                file.writeText(content.toString())
-                finalPath = file.absolutePath
-            } catch (e: Exception) {}
+                if (!dir.exists()) dir.mkdirs()
+                val file = File(dir, fileName)
+                java.io.FileWriter(file).use { writer ->
+                    writer.write("=== Quran Reels Diagnostic Report ===\n")
+                    writer.write("Time: ${Date()}\n")
+                    writer.write(extraData)
+                    writer.write("\n\n")
+                    for (log in getLogs()) {
+                        writer.write(log)
+                        writer.write("\n")
+                    }
+                }
+                if (finalPath.isEmpty()) {
+                    finalPath = file.absolutePath
+                }
+                android.util.Log.d("SystemDiagnostic", "Saved report to ${file.absolutePath}")
+            } catch (e: Exception) {
+                android.util.Log.e("SystemDiagnostic", "Failed to save to ${dir.absolutePath}", e)
+            }
         }
-        
+
         return finalPath
     }
 }
